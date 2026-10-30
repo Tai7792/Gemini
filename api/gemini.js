@@ -1,45 +1,45 @@
-
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // 1. Mở toàn quyền CORS cho trình duyệt
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', '*');
 
-  if (req.method === "OPTIONS") {
+  // Xử lý kiểm tra preflight OPTIONS của trình duyệt
+  if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "Method not allowed"
-    });
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "Missing API key"
-    });
-  }
-
   try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + apiKey,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(req.body)
-      }
-    );
+    // 2. Lấy đường dẫn API và tự động chuẩn hóa
+    // Lấy phần đường dẫn đằng sau /api
+    let cleanPath = req.url.replace(/^\/api(\/gemini)?/, '');
 
-    const data = await response.json();
-    return res.status(response.status).json(data);
+    // Tự động gắn /v1beta nếu đường dẫn chưa có
+    if (!cleanPath.startsWith('/v1beta')) {
+      cleanPath = '/v1beta' + cleanPath;
+    }
 
-  } catch (error) {
-    return res.status(500).json({
-      error: "Proxy request failed"
+    const targetUrl = `https://generativelanguage.googleapis.com${cleanPath}`;
+
+    // 3. Chuẩn bị dữ liệu body
+    const bodyData = req.method !== 'GET' && req.body
+      ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
+      : undefined;
+
+    // 4. Chuyển tiếp sang Google Gemini API (từ IP máy chủ Mỹ của Vercel)
+    const response = await fetch(targetUrl, {
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: bodyData,
     });
+
+    const data = await response.json().catch(() => ({}));
+
+    // 5. Trả kết quả về cho ứng dụng
+    return res.status(response.status).json(data);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
   }
 }
