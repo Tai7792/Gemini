@@ -1,29 +1,45 @@
-export default {
-  async fetch(request, env, ctx) {
-    // Cho phép CORS
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-          "Access-Control-Allow-Headers": "*"
-        }
-      });
-    }
 
-    const url = new URL(request.url);
-    // Chuyển tiếp request tới Google Gemini
-    const targetUrl = `https://generativelanguage.googleapis.com/v1beta${url.pathname}${url.search}`;
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-    const newRequest = new Request(targetUrl, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body
-    });
-
-    const response = await fetch(newRequest);
-    const newResponse = new Response(response.body, response);
-    newResponse.headers.set("Access-Control-Allow-Origin", "*");
-    return newResponse;
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
   }
-};
+
+  if (req.method !== "POST") {
+    return res.status(405).json({
+      error: "Method not allowed"
+    });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({
+      error: "Missing API key"
+    });
+  }
+
+  try {
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + apiKey,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(req.body)
+      }
+    );
+
+    const data = await response.json();
+    return res.status(response.status).json(data);
+
+  } catch (error) {
+    return res.status(500).json({
+      error: "Proxy request failed"
+    });
+  }
+}
